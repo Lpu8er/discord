@@ -1,0 +1,10 @@
+{
+    "clientId": "",
+    "clientSecret": "",
+    "uris": {
+        "auth": "",
+        "token": "",
+        "revoke": "",
+        "base": "",
+    }
+}
