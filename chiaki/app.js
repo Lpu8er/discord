@@ -36,4 +36,8 @@ app.use(function(err, req, res, next) {
   res.render('error');
 });
 
+var Bot = require('./bot.js');
+var bot = new Bot();
+bot.start();
+
 module.exports = app;

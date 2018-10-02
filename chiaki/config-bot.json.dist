@@ -1,6 +1,7 @@
 {
     "clientId": "",
     "clientSecret": "",
+    "token": "",
     "uris": {
         "auth": "",
         "token": "",
