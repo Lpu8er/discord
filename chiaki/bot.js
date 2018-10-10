@@ -81,39 +81,6 @@ class Bot {
         });
     }
     
-    /**
-     * { t: 'MESSAGE_CREATE',
-  s: 4,
-  op: 0,
-  d: 
-   { type: 0,
-     tts: false,
-     timestamp: '2018-10-10T14:07:22.921000+00:00',
-     pinned: false,
-     nonce: '499583729014931456',
-     mentions: [ [Object] ],
-     mention_roles: [],
-     mention_everyone: false,
-     member: 
-      { roles: [Array],
-        mute: false,
-        joined_at: '2016-12-29T16:52:48.503000+00:00',
-        deaf: false },
-     id: '499583729463853066',
-     embeds: [],
-     edited_timestamp: null,
-     content: '<@490845427273564171> hello world',
-     channel_id: '456142079123259413',
-     author: 
-      { username: 'Lpu8er',
-        id: '251661568771751946',
-        discriminator: '7837',
-        avatar: '9d6bbd85ec4ec5462bf1253bf9356615' },
-     attachments: [],
-     guild_id: '263117685532000257' } }
-
-     */
-    
     heartbeat(interval) {
         console.log('.');
         this.send(this.lastSequenceNumber, 1, 'HEARTBEAT');
