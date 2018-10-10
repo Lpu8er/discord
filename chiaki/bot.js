@@ -2,12 +2,14 @@
 class Bot {
     constructor() {
         this.config = require('./config-bot.json');
+        this.cc = this.config.commandCharacter || '.';
         var Client = require('node-rest-client').Client;
         this.restClient = new Client;
         this.W3CWebSocket = require('websocket').w3cwebsocket;
         this.connectionStatus = 0;
         this.heartbeatHandler = null;
         this.lastSequenceNumber = null;
+        this.botUserId = null;
     }
     
     start() {
@@ -64,7 +66,56 @@ class Bot {
         }));
     }
     
+    talk(channel, writtenMessage) {
+        this.restClient.post(this.config.uris.base+'/channels/'+channel+'/messages', {
+            data: {
+                'content': writtenMessage
+            },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bot '+this.config.token
+            }
+        }, (d,r) => {
+            console.log('AFTER TALKING BRO');
+            console.log(d);
+        });
+    }
+    
+    /**
+     * { t: 'MESSAGE_CREATE',
+  s: 4,
+  op: 0,
+  d: 
+   { type: 0,
+     tts: false,
+     timestamp: '2018-10-10T14:07:22.921000+00:00',
+     pinned: false,
+     nonce: '499583729014931456',
+     mentions: [ [Object] ],
+     mention_roles: [],
+     mention_everyone: false,
+     member: 
+      { roles: [Array],
+        mute: false,
+        joined_at: '2016-12-29T16:52:48.503000+00:00',
+        deaf: false },
+     id: '499583729463853066',
+     embeds: [],
+     edited_timestamp: null,
+     content: '<@490845427273564171> hello world',
+     channel_id: '456142079123259413',
+     author: 
+      { username: 'Lpu8er',
+        id: '251661568771751946',
+        discriminator: '7837',
+        avatar: '9d6bbd85ec4ec5462bf1253bf9356615' },
+     attachments: [],
+     guild_id: '263117685532000257' } }
+
+     */
+    
     heartbeat(interval) {
+        console.log('.');
         this.send(this.lastSequenceNumber, 1, 'HEARTBEAT');
         this.heartbeatHandler = setTimeout(() => { this.heartbeat(interval); }, interval);
     }
@@ -81,11 +132,11 @@ class Bot {
     read(e) {
         if('message' === e.type) { // readable
             let dd = JSON.parse(e.data);
+            if(dd.s) {
+                this.lastSequenceNumber = dd.s;
+            }
             if(10 === dd.op) {
                 if(dd.d.hasOwnProperty('heartbeat_interval')) {
-                    if(dd.s) {
-                        this.lastSequenceNumber = dd.s;
-                    }
                     // start heartbeating
                     this.heartbeat(parseInt(dd.d.heartbeat_interval));
                     // let's identify
@@ -95,8 +146,63 @@ class Bot {
                         'properties': {'$os': 'linux', '$browser': 'cli', '$device': 'node'}
                     }, 2, 'IDENTIFY');
                 } // else wtf ?
+            } else if(0 === dd.op) { // message, yes, but what ?
+                this.parseReceivedData(dd);
             }
         }
+    }
+    
+    parseReceivedData(nativeData) {
+        if('MESSAGE_CREATE' === nativeData.t) { // it is a message !
+            this.parseReceivedMessage(nativeData.d);
+        } else if('READY' === nativeData.t) { // ready event (hello server, how are you ?)
+            this.botUserId = nativeData.d.user.id; // we may need some other data, let's stick with it for now
+        }
+    }
+    
+    parseReceivedMessage(nativeMessage) {
+        if(0 === nativeMessage.type) { // 0 means "default", other are kinda special you know
+            let guildId = nativeMessage.guild_id;
+            let channelId = nativeMessage.channel_id;
+            let messageId = nativeMessage.id;
+            let senderId = nativeMessage.author.id;
+            let senderUsername = nativeMessage.author.username;
+            if(!nativeMessage.author.bot) { // this is important in fact
+                // first of all, if some user mentionned us, let's reply them
+                let ownMarker = '';
+                if(this.botUserId) {
+                    ownMarker = '<@'+this.botUserId+'>';
+                }
+                if(this.botUserId && (ownMarker === nativeMessage.content.substr(0, ownMarker.length))) {
+                    // mentionned, wtf.
+                    this.talk(channelId, '<@'+senderId+'> Let\'s not.');
+                } else if(this.cc === nativeMessage.content.substr(0, this.cc.length)) { // do we have some commands ?
+                    this.parseCommand(nativeMessage.content.substr(this.cc.length).trim(), channelId, messageId, senderId, senderUsername);
+                }
+            }
+        }
+    }
+    
+    parseCommand(command, channelId, messageId, senderId, senderUsername) {
+        let recognized = [
+            'help'
+        ];
+        let found = false;
+        for(let c of recognized) {
+            if(c === command.substr(0, c.length)) {
+                found = true;
+                let m = 'c'+c.substr(0, 1).toUpperCase()+c.substr(1);
+                this[m](command.substr(c.length).trim(), channelId, messageId, senderId, senderUsername);
+            }
+        }
+        if(!found) {
+            this.talk(channelId, 'Unrecognized command.');
+            this.cHelp('', channelId, messageId, senderId, senderUsername);
+        }
+    }
+    
+    cHelp(args, channelId, messageId, senderId, senderUsername) {
+        this.talk(channelId, 'We all need help, you know.');
     }
 };
 
