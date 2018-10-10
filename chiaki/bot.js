@@ -10,6 +10,7 @@ class Bot {
         this.heartbeatHandler = null;
         this.lastSequenceNumber = null;
         this.botUserId = null;
+        this.emojis = {};
     }
     
     start() {
@@ -25,11 +26,30 @@ class Bot {
                 'Authorization': 'Bot '+this.config.token
             }
         }, (d,r) => {
-            for(let l in d) {
+            for(let l of d) {
                 this.guilds.push(l.id);
             }
             this.triggerHappy();
         });
+    }
+    
+    getEmojis() {
+        for(let g of this.guilds) {
+            this.restClient.get(this.config.uris.base+'/guilds/'+g+'/emojis', {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bot '+this.config.token
+                }
+            }, (d,r) => {
+                for(let e of d) {
+                    this.emojis[e.name] = '<:'+e.name+':'+e.id+'>';
+                }
+            });
+        }
+    }
+    
+    getEmoji(name) {
+        return this.emojis.hasOwnProperty(name)? this.emojis[name]:name;
     }
     
     getGatewayUri() {
@@ -76,8 +96,8 @@ class Bot {
                 'Authorization': 'Bot '+this.config.token
             }
         }, (d,r) => {
-            console.log('AFTER TALKING BRO');
-            console.log(d);
+            /*console.log('AFTER TALKING BRO');
+            console.log(d);*/
         });
     }
     
@@ -93,6 +113,7 @@ class Bot {
     
     connected(e) {
         this.connectionStatus = 2; // connected, not identified
+        this.getEmojis();
         console.log('Connected to gateway.');
     }
     
@@ -152,7 +173,9 @@ class Bot {
     
     parseCommand(command, channelId, messageId, senderId, senderUsername) {
         let recognized = [
-            'help'
+            'help',
+            'ferplay',
+            'rand'
         ];
         let found = false;
         for(let c of recognized) {
@@ -168,8 +191,95 @@ class Bot {
         }
     }
     
+    splitArgs(args) {
+        let r = [];
+        let x = args.split(/( +)/);
+        let l = false;
+        let w = '';
+        for(let s of x) {
+            s = s.trim();
+            if(0 < s.length) { // ignore empty stuff
+                if('"' === s.substr(0, 1)) { // "keep-alive"
+                    l = true;
+                    w = s.substr(1);
+                } else {
+                    if(l && ('"' === s.substr(-1, 1))) { // live and let die
+                        w+= ' '+s.slice(0, -1);
+                        r.push(w);
+                        l = false;
+                    } else if(l) {
+                        w+= ' '+s;
+                    } else {
+                        r.push(s);
+                    }
+                }
+            }
+        }
+        return r;
+    }
+    
     cHelp(args, channelId, messageId, senderId, senderUsername) {
-        this.talk(channelId, 'We all need help, you know.');
+        let xargs = this.splitArgs(args);
+        let xr = [];
+        if(1 === xargs.length) {
+            if('help' === xargs[0]) {
+                xr.push('We all need help, you know.');
+                xr.push('`.help` : generic help');
+                xr.push('`.help <cmd>` : help about a command / topic');
+            } else if('rand' === xargs[0]) {
+                xr.push('`.rand` : random number between 0 and 10');
+                xr.push('`.rand <nb>` : random number between 0 and <nb>');
+                xr.push('`.rand <min> <max>` : random number between <min> and <max>');
+            }
+        } else {
+            xr.push('We all need help, you know.');
+            xr.push('`.rand` : random number');
+        }
+        this.talk(channelId, xr.join("\n"));
+    }
+    
+    cFerplay(args, channelId, messageId, senderId, senderUsername) {
+        this.talk(channelId, 'Go seek professional help.');
+    }
+    
+    cRand(args, channelId, messageId, senderId, senderUsername) {
+        let r = null;
+        let xargs = this.splitArgs(args);
+        if(0 === xargs.length) {
+            r = Math.round(10 * Math.random());
+            this.talk(channelId, this.resultOfRandom(r));
+        } else if(1 === xargs.length) {
+            if(!isNaN(xargs[0])) {
+                r = Math.round((new Number(xargs[0])) * Math.random());
+                this.talk(channelId, this.resultOfRandom(r));
+            } else {
+                this.talk(channelId, 'This is not a number i can understand, just for you know. '+this.getEmoji('puf'));
+            }
+        } else if(2 === xargs.length) {
+            if(!isNaN(xargs[0]) && !isNaN(xargs[1])) {
+                let a = new Number(xargs[0]);
+                let b = new Number(xargs[1]);
+                if(b > a) {
+                    r = Math.round(a + (b - a) * Math.random());
+                    this.talk(channelId, this.resultOfRandom(r));
+                } else {
+                    this.talk(channelId, 'TELL A DEVELOPER THAT '+b+' < '+a+' '+this.getEmoji('oktard'));
+                }
+            } else {
+                this.talk(channelId, 'This is not a number i can understand, just for you know. '+this.getEmoji('puf'));
+            }
+        } else {
+            this.cHelp('rand', channelId, messageId, senderId, senderUsername);
+        }
+    }
+    
+    resultOfRandom(r) {
+        let w = '';
+        let n = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+        for(let c of new String(r)) {
+            w+=':'+n[new Number(c)]+':';
+        }
+        return w;
     }
 };
 
