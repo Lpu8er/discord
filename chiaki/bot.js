@@ -101,6 +101,10 @@ class Bot {
         });
     }
     
+    mention(channel, user, writtenMessage) {
+        this.talk(channel, '<@'+user+'> '+writtenMessage);
+    }
+    
     heartbeat(interval) {
         console.log('.');
         this.send(this.lastSequenceNumber, 1, 'HEARTBEAT');
@@ -163,7 +167,7 @@ class Bot {
                 }
                 if(this.botUserId && (ownMarker === nativeMessage.content.substr(0, ownMarker.length))) {
                     // mentionned, wtf.
-                    this.talk(channelId, '<@'+senderId+'> Let\'s not.');
+                    this.mention(channelId, senderId, 'Let\'s not.');
                 } else if(this.cc === nativeMessage.content.substr(0, this.cc.length)) { // do we have some commands ?
                     this.parseCommand(nativeMessage.content.substr(this.cc.length).trim(), channelId, messageId, senderId, senderUsername);
                 }
@@ -175,7 +179,8 @@ class Bot {
         let recognized = [
             'help',
             'ferplay',
-            'rand'
+            'rand',
+            'flip'
         ];
         let found = false;
         for(let c of recognized) {
@@ -230,16 +235,39 @@ class Bot {
                 xr.push('`.rand` : random number between 0 and 10');
                 xr.push('`.rand <nb>` : random number between 0 and <nb>');
                 xr.push('`.rand <min> <max>` : random number between <min> and <max>');
+            } else if('flip' === xargs[0]) {
+                xr.push('`.flip` : flip a coin. Because we do not have the emoji, display moon and sun.');
+                xr.push('`.flip <nb>` : Flip <nb> coins cuz why not.');
             }
         } else {
             xr.push('We all need help, you know.');
             xr.push('`.rand` : random number');
+            xr.push('`.flip` : flip a coin');
         }
         this.talk(channelId, xr.join("\n"));
     }
     
     cFerplay(args, channelId, messageId, senderId, senderUsername) {
         this.talk(channelId, 'Go seek professional help.');
+    }
+    
+    cFlip(args, channelId, messageId, senderId, senderUsername) {
+        let r = null;
+        let xargs = this.splitArgs(args);
+        let nb = 1;
+        if(1 === xargs.length && !isNaN(xargs[0]) && 1 <= (new Number(xargs[0]))) {
+            nb = Math.min(25, new Number(xargs[0]));
+        }
+        let m = '';
+        for(let i=0;i<nb;i++) {
+            let f = Math.round(Math.random());
+            if(0 === f) {
+                m+= ':last_quarter_moon_with_face:';
+            } else {
+                m+= ':sun_with_face:';
+            }
+        }
+        this.mention(channelId, senderId, m);
     }
     
     cRand(args, channelId, messageId, senderId, senderUsername) {
