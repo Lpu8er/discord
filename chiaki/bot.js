@@ -1,16 +1,19 @@
+var MongoClient = require('mongodb').MongoClient, assert = require('assert');
+var RestClient = require('node-rest-client').Client;
 
 class Bot {
     constructor() {
         this.config = require('./config-bot.json');
         this.cc = this.config.commandCharacter || '.';
-        var Client = require('node-rest-client').Client;
-        this.restClient = new Client;
+        this.restClient = new RestClient;
         this.W3CWebSocket = require('websocket').w3cwebsocket;
         this.connectionStatus = 0;
         this.heartbeatHandler = null;
         this.lastSequenceNumber = null;
         this.botUserId = null;
         this.emojis = {};
+        // Connection URL
+        this.mongoUrl = 'mongodb://localhost:27017/'+this.config.dbname;
     }
     
     start() {
@@ -18,6 +21,19 @@ class Bot {
         this.gatewayUri = null;
         this.getGuilds();
         this.getGatewayUri();
+        console.log('Connecting...');
+        MongoClient.connect(this.mongoUrl, (err, db) => {
+            assert.equal(null, err);
+            console.log('Connected successfully to server');
+            this.db = db;
+        });
+    }
+    
+    stop() {
+        this.wsc = null;
+        this.restClient = null;
+        this.db.close();
+        console.log('Disconnected.');
     }
     
     getGuilds() {
