@@ -8,5 +8,6 @@
         "revoke": "",
         "base": "",
     },
-    "dbname": ""
+    "dbname": "",
+    "daily": 0
 }

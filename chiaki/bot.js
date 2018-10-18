@@ -1,4 +1,5 @@
 var MongoClient = require('mongodb').MongoClient, assert = require('assert');
+var ObjectID = require('mongodb').ObjectID;
 var RestClient = require('node-rest-client').Client;
 
 class Bot {
@@ -14,6 +15,9 @@ class Bot {
         this.emojis = {};
         // Connection URL
         this.mongoUrl = 'mongodb://localhost:27017/'+this.config.dbname;
+        this.db = null;
+        this.usersDb = null;
+        this.usersCache = {};
     }
     
     start() {
@@ -22,10 +26,16 @@ class Bot {
         this.getGuilds();
         this.getGatewayUri();
         console.log('Connecting...');
-        MongoClient.connect(this.mongoUrl, (err, db) => {
+        MongoClient.connect(this.mongoUrl, (err, client) => {
             assert.equal(null, err);
+            this.db = client.db(this.config.dbname);
             console.log('Connected successfully to server');
-            this.db = db;
+            this.usersDb = this.db.collection('users');
+            //// this does not works because MongoDB is one of the worst shit i've ever seen
+            // primary key does not work
+            // ObjectID is unusable and cannot be created excepted with a shitty format
+            // cannot declare primary key so will duplicate the things all day long
+            // need to redo the primary stuff or implements add-ons, that is unbelievable
         });
     }
     
@@ -34,6 +44,52 @@ class Bot {
         this.restClient = null;
         this.db.close();
         console.log('Disconnected.');
+    }
+    
+    searchUser(userId) {
+        let returns = null;
+        if(this.usersCache.hasOwnProperty(userId)) {
+            returns = this.usersCache[userId];
+        } else {
+            this.usersDb.find({
+                '_id': userId
+            }).limit(1).toArray((err, docs) => {
+                if(docs && docs.length) {
+                    returns = docs[0];
+                    this.usersCache[userId] = returns;
+                }
+            });
+        }
+        return returns;
+    }
+    
+    createUser(userId) {
+        this.restClient.get(this.config.uris.base+'/users/'+userId, {
+            headers: {
+                'Authorization': 'Bot '+this.config.token
+            }
+        }, (d,r) => {
+            if(d) {
+                this.usersCache[userId] = {'_id': new ObjectID(userId), 'name': d.username, 'coins': 0, 'daily': null};
+                this.usersDb.insertOne(this.usersCache[userId]);
+            }
+        });
+    }
+    
+    changeCoins(userId, coins) {
+        let ud = this.searchUser(userId);
+        if(null !== ud) {
+            this.usersCache[userId].coins += coins;
+            this.usersDb.updateOne({'_id': userId}, {$inc: {'coins': coins}});
+        }
+    }
+    
+    setDaily(userId) {
+        let ud = this.searchUser(userId);
+        if(null !== ud) {
+            this.usersCache[userId].daily += new Date();
+            this.usersDb.updateOne({'_id': userId}, {$set: {'daily': this.usersCache[userId].daily}});
+        }
     }
     
     getGuilds() {
@@ -196,12 +252,19 @@ class Bot {
             'help',
             'ferplay',
             'rand',
-            'flip'
+            'flip',
+            'money',
+            'daily'
         ];
         let found = false;
         for(let c of recognized) {
             if(c === command.substr(0, c.length)) {
                 found = true;
+                // as long as a recognized command is received, register the user
+                let userData = this.searchUser(senderId);
+                if(null === userData) {
+                    this.createUser(senderId);
+                }
                 let m = 'c'+c.substr(0, 1).toUpperCase()+c.substr(1);
                 this[m](command.substr(c.length).trim(), channelId, messageId, senderId, senderUsername);
             }
@@ -254,11 +317,17 @@ class Bot {
             } else if('flip' === xargs[0]) {
                 xr.push('`.flip` : flip a coin. Because we do not have the emoji, display moon and sun.');
                 xr.push('`.flip <nb>` : Flip <nb> coins cuz why not.');
+            } else if('money' === xargs[0]) {
+                xr.push('`.money` : display your money.');
+            } else if('daily' === xargs[0]) {
+                xr.push('`.daily` : Get a daily reward of '+this.config.daily+' coins.');
             }
         } else {
             xr.push('We all need help, you know.');
             xr.push('`.rand` : random number');
             xr.push('`.flip` : flip a coin');
+            xr.push('`.money` : display your money');
+            xr.push('`.daily` : get your daily reward');
         }
         this.talk(channelId, xr.join("\n"));
     }
@@ -324,6 +393,29 @@ class Bot {
             w+=':'+n[new Number(c)]+':';
         }
         return w;
+    }
+    
+    cMoney(args, channelId, messageId, senderId, senderUsername) {
+        let ud = this.searchUser(senderId);
+        if(null === ud) {
+            this.mention(channelId, senderId, 'Please try again later');
+        } else {
+            this.mention(channelId, senderId, ud.coins);
+        }
+    }
+    
+    cDaily(args, channelId, messageId, senderId, senderUsername) {
+        let ud = this.searchUser(senderId);
+        if(null === ud) {
+            this.mention(channelId, senderId, 'Please try again later');
+        } else if((null === ud.daily)
+                || (ud.daily <= ((new Date()) + 1))) {
+            this.setDaily(senderId);
+            this.changeCoins(this.config.daily);
+            this.cMoney(args, channelId, messageId, senderId, senderUsername);
+        } else {
+            this.mention(channelId, senderId, 'Already claimed your daily reward ('+ud.daily+')');
+        }
     }
 };
 
