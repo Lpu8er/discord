@@ -1,5 +1,4 @@
 var MongoClient = require('mongodb').MongoClient, assert = require('assert');
-var ObjectID = require('mongodb').ObjectID;
 var RestClient = require('node-rest-client').Client;
 
 class Bot {
@@ -70,7 +69,7 @@ class Bot {
             }
         }, (d,r) => {
             if(d) {
-                this.usersCache[userId] = {'_id': new ObjectID(userId), 'name': d.username, 'coins': 0, 'daily': null};
+                this.usersCache[userId] = {'_id': userId, 'name': d.username, 'coins': 0, 'daily': null};
                 this.usersDb.insertOne(this.usersCache[userId]);
             }
         });
@@ -87,7 +86,7 @@ class Bot {
     setDaily(userId) {
         let ud = this.searchUser(userId);
         if(null !== ud) {
-            this.usersCache[userId].daily += new Date();
+            this.usersCache[userId].daily = new Date();
             this.usersDb.updateOne({'_id': userId}, {$set: {'daily': this.usersCache[userId].daily}});
         }
     }
@@ -238,9 +237,11 @@ class Bot {
                     ownMarker = '<@'+this.botUserId+'>';
                 }
                 if(this.botUserId && (ownMarker === nativeMessage.content.substr(0, ownMarker.length))) {
+                    this.searchUser(senderId); // preload
                     // mentionned, wtf.
                     this.mention(channelId, senderId, 'Let\'s not.');
                 } else if(this.cc === nativeMessage.content.substr(0, this.cc.length)) { // do we have some commands ?
+                    this.searchUser(senderId); // preload
                     this.parseCommand(nativeMessage.content.substr(this.cc.length).trim(), channelId, messageId, senderId, senderUsername);
                 }
             }
@@ -254,7 +255,8 @@ class Bot {
             'rand',
             'flip',
             'money',
-            'daily'
+            'daily',
+            'bet'
         ];
         let found = false;
         for(let c of recognized) {
@@ -321,6 +323,8 @@ class Bot {
                 xr.push('`.money` : display your money.');
             } else if('daily' === xargs[0]) {
                 xr.push('`.daily` : Get a daily reward of '+this.config.daily+' coins.');
+            } else if('bet' === xargs[0]) {
+                xr.push('`.bet <coins> <bet>` : bet <coins> on <bet> (use h, head, f, face, t, tail, p, pile');
             }
         } else {
             xr.push('We all need help, you know.');
@@ -328,6 +332,7 @@ class Bot {
             xr.push('`.flip` : flip a coin');
             xr.push('`.money` : display your money');
             xr.push('`.daily` : get your daily reward');
+            xr.push('`.bet` : do a bet on head n tail');
         }
         this.talk(channelId, xr.join("\n"));
     }
@@ -363,15 +368,15 @@ class Bot {
             this.talk(channelId, this.resultOfRandom(r));
         } else if(1 === xargs.length) {
             if(!isNaN(xargs[0])) {
-                r = Math.round((new Number(xargs[0])) * Math.random());
+                r = Math.round((new Number(Math.min(99999, Math.max(1, xargs[0]))) * Math.random()));
                 this.talk(channelId, this.resultOfRandom(r));
             } else {
                 this.talk(channelId, 'This is not a number i can understand, just for you know. '+this.getEmoji('puf'));
             }
         } else if(2 === xargs.length) {
             if(!isNaN(xargs[0]) && !isNaN(xargs[1])) {
-                let a = new Number(xargs[0]);
-                let b = new Number(xargs[1]);
+                let a = new Number(Math.min(99999, Math.max(1, xargs[0])));
+                let b = new Number(Math.min(99999, Math.max(1, xargs[1])));
                 if(b > a) {
                     r = Math.round(a + (b - a) * Math.random());
                     this.talk(channelId, this.resultOfRandom(r));
@@ -411,10 +416,44 @@ class Bot {
         } else if((null === ud.daily)
                 || (ud.daily <= ((new Date()) + 1))) {
             this.setDaily(senderId);
-            this.changeCoins(this.config.daily);
+            this.changeCoins(senderId, this.config.daily);
             this.cMoney(args, channelId, messageId, senderId, senderUsername);
         } else {
             this.mention(channelId, senderId, 'Already claimed your daily reward ('+ud.daily+')');
+        }
+    }
+    
+    cBet(args, channelId, messageId, senderId, senderUsername) {
+        let ud = this.searchUser(senderId);
+        let xargs = this.splitArgs(args);
+        if(null === ud) {
+            this.mention(channelId, senderId, 'Please try again later');
+        } else if(2 === xargs.length) {
+            let b = Math.min(1000000, Math.max(1, xargs[0]));
+            if(b <= ud.coins) {
+                let c = xargs[1];
+                if(-1 < ['h', 'head', 't', 'tail', 'p', 'pile', 'f', 'face'].indexOf(c)) {
+                    this.changeCoins(senderId, (-1 * b));
+                    c = (-1 < ['h', 'f', 'head', 'face'].indexOf(c));
+                    let f = Math.round(Math.random());
+                    let m = '';
+                    if(0 === f) {
+                        m+= ':last_quarter_moon_with_face:';
+                    } else {
+                        m+= ':sun_with_face:';
+                    }
+                    if(c == f) {
+                        this.changeCoins(senderId, Math.ceil(b * 2.25));
+                        this.mention(channelId, senderId, m + ' Nice ! '+this.getEmoji('yull')+' You won '+(new String(Math.ceil(b * 2.25))));
+                    } else {
+                        this.mention(channelId, senderId, m + ' Sowwy... '+this.getEmoji('monofew'));
+                    }
+                }
+            } else{
+                this.mention(channelId, senderId, 'Do not bet what you do not have (you have '+ud.coins+')');
+            }
+        } else {
+            this.cHelp('bet', channelId, messageId, senderId, senderUsername);
         }
     }
 };
