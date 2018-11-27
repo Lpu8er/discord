@@ -1,0 +1,13 @@
+{
+    "clientId": "",
+    "clientSecret": "",
+    "token": "",
+    "uris": {
+        "auth": "",
+        "token": "",
+        "revoke": "",
+        "base": "",
+    },
+    "dbname": "",
+    "daily": 0
+}
