@@ -252,6 +252,8 @@ class Bot {
         let recognized = [
             'help',
             'ferplay',
+            'mf',
+            'despacito',
             'rand',
             'flip',
             'money',
@@ -455,6 +457,14 @@ class Bot {
         } else {
             this.cHelp('bet', channelId, messageId, senderId, senderUsername);
         }
+    }
+    
+    cMf(args, channelId, messageId, senderId, senderUsername) {
+        this.mention(channelId, senderId, 'MF is for french words Match facile, or in english Easy match');
+    }
+    
+    cDespacito(args, channelId, messageId, senderId, senderUsername) {
+        this.mention(channelId, senderId, 'https://www.youtube.com/watch?v=1P1c-ML9MMI');
     }
 };
 

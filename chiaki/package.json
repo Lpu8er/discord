@@ -18,7 +18,5 @@
     "twig": "~0.10.3",
     "websocket": "^1.0.28"
   },
-  "devDependencies": {
-    "nodemon": "^1.18.4"
-  }
+  "devDependencies": {}
 }
